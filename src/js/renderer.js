@@ -1,0 +1,254 @@
+// Canvas renderer for the game
+
+const Renderer = {
+  canvas: null,
+  ctx: null,
+  tileSize: 40,
+  initialized: false,
+  
+  // Colors
+  colors: {
+    EMPTY: '#e8e8e8',
+    WALL: '#2c3e50',
+    BOX: '#8b6f47',
+    HOLE: '#000000',
+    BOMB: '#e74c3c',
+    EXPLOSION: '#ff9800',
+    PLAYER: ['#3498db', '#2ecc71', '#9b59b6', '#f1c40f'],
+    UPGRADE_SPEED: '#00FF00',
+    UPGRADE_BOMB: '#FF00FF',
+    UPGRADE_RANGE: '#FFFF00'
+  },
+  
+  init(mapWidth, mapHeight) {
+    this.canvas = document.getElementById('game-canvas');
+    this.ctx = this.canvas.getContext('2d');
+    
+    // Always update canvas size (maps can be different sizes)
+    this.canvas.width = mapWidth * this.tileSize;
+    this.canvas.height = mapHeight * this.tileSize;
+    
+    this.initialized = true;
+  },
+  
+  reset() {
+    // Reset renderer for new game
+    this.initialized = false;
+  },
+  
+  render(gameState, currentPlayerId) {
+    if (!this.initialized) return;
+    
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    
+    // Draw map tiles
+    this.drawMap(gameState.map);
+    
+    // Draw upgrades
+    this.drawUpgrades(gameState.map.upgrades);
+    
+    // Draw bombs
+    this.drawBombs(gameState.bombs);
+    
+    // Draw explosions
+    this.drawExplosions(gameState.explosions);
+    
+    // Draw players
+    this.drawPlayers(gameState.players, currentPlayerId);
+  },
+  
+  drawMap(map) {
+    for (let y = 0; y < map.height; y++) {
+      for (let x = 0; x < map.width; x++) {
+        const tile = map.tiles[y][x];
+        let color;
+        
+        switch (tile) {
+          case '#':
+            color = this.colors.WALL;
+            break;
+          case 'X':
+            color = this.colors.BOX;
+            break;
+          case 'O':
+            color = this.colors.HOLE;
+            break;
+          default:
+            color = this.colors.EMPTY;
+        }
+        
+        this.drawTile(x, y, color);
+        
+        // Add grid lines
+        this.ctx.strokeStyle = '#ddd';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(
+          x * this.tileSize,
+          y * this.tileSize,
+          this.tileSize,
+          this.tileSize
+        );
+      }
+    }
+  },
+  
+  drawTile(x, y, color) {
+    this.ctx.fillStyle = color;
+    this.ctx.fillRect(
+      x * this.tileSize,
+      y * this.tileSize,
+      this.tileSize,
+      this.tileSize
+    );
+  },
+  
+  drawUpgrades(upgrades) {
+    for (const upgrade of upgrades) {
+      const centerX = upgrade.x * this.tileSize + this.tileSize / 2;
+      const centerY = upgrade.y * this.tileSize + this.tileSize / 2;
+      const radius = this.tileSize / 3;
+      
+      // Draw circle
+      this.ctx.fillStyle = this.colors[`UPGRADE_${upgrade.type}`] || '#FFF';
+      this.ctx.beginPath();
+      this.ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      this.ctx.fill();
+      
+      // Draw border
+      this.ctx.strokeStyle = '#333';
+      this.ctx.lineWidth = 2;
+      this.ctx.stroke();
+      
+      // Draw letter
+      this.ctx.fillStyle = '#333';
+      this.ctx.font = 'bold 20px sans-serif';
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
+      this.ctx.fillText(upgrade.type[0], centerX, centerY);
+    }
+  },
+  
+  drawBombs(bombs) {
+    for (const bomb of bombs) {
+      const centerX = bomb.x * this.tileSize + this.tileSize / 2;
+      const centerY = bomb.y * this.tileSize + this.tileSize / 2;
+      const radius = this.tileSize / 3;
+      
+      // Pulsing effect based on timer
+      const pulseScale = 1 + Math.sin(Date.now() / 200) * 0.1;
+      
+      // Draw bomb
+      this.ctx.fillStyle = this.colors.BOMB;
+      this.ctx.beginPath();
+      this.ctx.arc(centerX, centerY, radius * pulseScale, 0, Math.PI * 2);
+      this.ctx.fill();
+      
+      // Draw fuse
+      this.ctx.strokeStyle = '#000';
+      this.ctx.lineWidth = 3;
+      this.ctx.beginPath();
+      this.ctx.moveTo(centerX, centerY - radius * pulseScale);
+      this.ctx.lineTo(centerX, centerY - radius * pulseScale - 10);
+      this.ctx.stroke();
+      
+      // Draw timer
+      this.ctx.fillStyle = '#fff';
+      this.ctx.font = 'bold 16px sans-serif';
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
+      this.ctx.fillText(Math.ceil(bomb.timer / 1000), centerX, centerY);
+    }
+  },
+  
+  drawExplosions(explosions) {
+    const now = Date.now();
+    
+    for (const explosion of explosions) {
+      const age = now - explosion.timestamp;
+      const alpha = 1 - (age / explosion.duration);
+      
+      if (alpha > 0) {
+        for (const tile of explosion.tiles) {
+          this.ctx.fillStyle = `rgba(255, 152, 0, ${alpha})`;
+          this.ctx.fillRect(
+            tile.x * this.tileSize,
+            tile.y * this.tileSize,
+            this.tileSize,
+            this.tileSize
+          );
+          
+          // Draw explosion rays
+          this.ctx.strokeStyle = `rgba(255, 200, 0, ${alpha})`;
+          this.ctx.lineWidth = 3;
+          const centerX = tile.x * this.tileSize + this.tileSize / 2;
+          const centerY = tile.y * this.tileSize + this.tileSize / 2;
+          
+          for (let i = 0; i < 4; i++) {
+            const angle = (i * Math.PI / 2) + (age / 100);
+            this.ctx.beginPath();
+            this.ctx.moveTo(centerX, centerY);
+            this.ctx.lineTo(
+              centerX + Math.cos(angle) * this.tileSize / 2,
+              centerY + Math.sin(angle) * this.tileSize / 2
+            );
+            this.ctx.stroke();
+          }
+        }
+      }
+    }
+  },
+  
+  drawPlayers(players, currentPlayerId) {
+    players.forEach((player, index) => {
+      if (!player.alive) return;
+      
+      // Players now have fractional positions - multiply by tileSize directly
+      const centerX = player.x * this.tileSize;
+      const centerY = player.y * this.tileSize;
+      const radius = this.tileSize / 3; // Smaller player size
+      
+      // Get player color
+      const colorIndex = players.findIndex(p => p.id === player.id) % this.colors.PLAYER.length;
+      const playerColor = this.colors.PLAYER[colorIndex];
+      
+      // Draw shadow
+      this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      this.ctx.beginPath();
+      this.ctx.ellipse(centerX, centerY + radius / 2, radius * 0.8, radius * 0.4, 0, 0, Math.PI * 2);
+      this.ctx.fill();
+      
+      // Draw player body
+      this.ctx.fillStyle = playerColor;
+      this.ctx.beginPath();
+      this.ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      this.ctx.fill();
+      
+      // Draw border
+      this.ctx.strokeStyle = player.id === currentPlayerId ? '#FFD700' : '#333';
+      this.ctx.lineWidth = player.id === currentPlayerId ? 3 : 2;
+      this.ctx.stroke();
+      
+      // Draw eyes
+      this.ctx.fillStyle = '#fff';
+      this.ctx.beginPath();
+      this.ctx.arc(centerX - radius / 3, centerY - radius / 4, radius / 5, 0, Math.PI * 2);
+      this.ctx.arc(centerX + radius / 3, centerY - radius / 4, radius / 5, 0, Math.PI * 2);
+      this.ctx.fill();
+      
+      this.ctx.fillStyle = '#000';
+      this.ctx.beginPath();
+      this.ctx.arc(centerX - radius / 3, centerY - radius / 4, radius / 8, 0, Math.PI * 2);
+      this.ctx.arc(centerX + radius / 3, centerY - radius / 4, radius / 8, 0, Math.PI * 2);
+      this.ctx.fill();
+      
+      // Draw username below player
+      this.ctx.fillStyle = '#333';
+      this.ctx.font = 'bold 12px sans-serif';
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'top';
+      this.ctx.fillText(player.username, centerX, centerY + radius + 5);
+    });
+  }
+};
+
+

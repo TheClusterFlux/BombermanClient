@@ -1,0 +1,13 @@
+{
+  "name": "bomberman-client",
+  "version": "1.0.0",
+  "description": "Bomberman game client web interface",
+  "scripts": {
+    "build": "echo 'Static files - no build needed'"
+  },
+  "keywords": ["bomberman", "game", "client"],
+  "author": "",
+  "license": "ISC"
+}
+
+

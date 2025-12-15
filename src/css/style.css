@@ -1,0 +1,421 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #333;
+}
+
+#app {
+  width: 100%;
+  height: 100vh;
+  position: relative;
+}
+
+.screen {
+  display: none;
+  width: 100%;
+  height: 100%;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.screen.active {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.container {
+  background: white;
+  border-radius: 16px;
+  padding: 40px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  max-width: 800px;
+  width: 100%;
+}
+
+h1 {
+  text-align: center;
+  color: #667eea;
+  margin-bottom: 30px;
+  font-size: 2.5em;
+}
+
+h2 {
+  color: #667eea;
+  margin-bottom: 20px;
+}
+
+h3 {
+  color: #555;
+  margin-bottom: 15px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: #555;
+  font-weight: 600;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: border-color 0.3s;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  text-transform: uppercase;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.btn-primary {
+  background: #667eea;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #5568d3;
+}
+
+.btn-secondary {
+  background: #888;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background: #666;
+}
+
+.btn-success {
+  background: #10b981;
+  color: white;
+}
+
+.btn-success:hover {
+  background: #059669;
+}
+
+.btn-danger {
+  background: #ef4444;
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #dc2626;
+}
+
+#connection-status {
+  margin-top: 20px;
+  text-align: center;
+  color: #666;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.user-info {
+  color: #667eea;
+  font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.lobby-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lobby-item {
+  background: #f7f7f7;
+  padding: 20px;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: background 0.3s;
+}
+
+.lobby-item:hover {
+  background: #e7e7e7;
+}
+
+.lobby-info h3 {
+  margin: 0 0 8px 0;
+  color: #333;
+}
+
+.lobby-meta {
+  color: #666;
+  font-size: 14px;
+}
+
+.empty-message {
+  text-align: center;
+  color: #999;
+  padding: 40px;
+}
+
+.modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.5);
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal.active {
+  display: flex;
+}
+
+.modal-content {
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  max-width: 500px;
+  width: 90%;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.lobby-room-content {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.ready-status {
+  background: #f0f0f0;
+  padding: 10px 15px;
+  border-radius: 8px;
+  text-align: center;
+  font-weight: 600;
+  color: #667eea;
+  margin-bottom: 15px;
+  font-size: 16px;
+}
+
+.players-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.player-item {
+  background: #f7f7f7;
+  padding: 15px;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.player-name {
+  font-weight: 600;
+  color: #333;
+}
+
+.player-status {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.player-status.ready {
+  background: #10b981;
+  color: white;
+}
+
+.player-status.not-ready {
+  background: #ef4444;
+  color: white;
+}
+
+.player-status.host {
+  background: #667eea;
+  color: white;
+}
+
+.lobby-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  align-items: center;
+}
+
+.lobby-hint {
+  color: #666;
+  font-size: 14px;
+  text-align: center;
+}
+
+/* Game Screen Styles */
+.game-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 20px;
+}
+
+.game-header {
+  text-align: center;
+  margin-bottom: 20px;
+  color: white;
+}
+
+.game-header h2 {
+  color: white;
+  margin: 0;
+}
+
+#game-status {
+  color: white;
+  font-size: 18px;
+  margin-top: 10px;
+}
+
+.game-wrapper {
+  background: white;
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+#game-canvas {
+  display: block;
+  border: 2px solid #333;
+  border-radius: 4px;
+}
+
+.game-hud {
+  margin-top: 20px;
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  min-width: 600px;
+}
+
+.player-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.stat-item {
+  background: #f7f7f7;
+  padding: 15px;
+  border-radius: 8px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #666;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #333;
+}
+
+.controls-info {
+  text-align: center;
+  color: #666;
+  border-top: 1px solid #ddd;
+  padding-top: 15px;
+}
+
+/* Game Over Screen */
+#game-result {
+  text-align: center;
+  margin: 30px 0;
+  font-size: 24px;
+}
+
+.winner {
+  color: #10b981;
+  font-weight: 700;
+}
+
+.draw {
+  color: #ef4444;
+  font-weight: 700;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .container {
+    padding: 20px;
+  }
+  
+  h1 {
+    font-size: 2em;
+  }
+  
+  .game-hud {
+    min-width: auto;
+    width: 100%;
+  }
+}
+
+

@@ -1,0 +1,41 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bomberman-client
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bomberman-client
+  template:
+    metadata:
+      labels:
+        app: bomberman-client
+    spec:
+      containers:
+        - name: bomberman-client
+          image: docker.io/keanuwatts/theclusterflux:bomberman-client
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+      imagePullSecrets:
+        - name: dockerhub-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bomberman-client
+  namespace: default
+spec:
+  selector:
+    app: bomberman-client
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP
+
+
