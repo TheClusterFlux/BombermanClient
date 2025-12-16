@@ -16,12 +16,12 @@ class BombermanClient {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.hostname;
     
-    // For production, use separate subdomain, for local dev use direct connection
+    // For production, use /ws path on same domain, for local dev use direct connection
     let wsUrl;
     if (host === 'localhost' || host === '127.0.0.1') {
       wsUrl = `${protocol}//${host}:8080`; // Local dev
     } else {
-      wsUrl = `${protocol}//bombermanws.theclusterflux.com`; // Production with separate subdomain
+      wsUrl = `${protocol}//${host}/ws`; // Production - same domain with /ws path
     }
     
     console.log('Connecting to:', wsUrl);
