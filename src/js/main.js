@@ -16,10 +16,10 @@ class BombermanClient {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.hostname;
     
-    // For production, use /ws path on same domain, for local dev use direct connection
+    // Use /ws path for both local dev and production
     let wsUrl;
     if (host === 'localhost' || host === '127.0.0.1') {
-      wsUrl = `${protocol}//${host}:8080`; // Local dev
+      wsUrl = `${protocol}//${host}:8080/ws`; // Local dev
     } else {
       wsUrl = `${protocol}//${host}/ws`; // Production - same domain with /ws path
     }
