@@ -15,14 +15,13 @@ class BombermanClient {
     // Determine WebSocket URL based on current location
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.hostname;
-    const port = window.location.port ? `:${window.location.port}` : '';
     
-    // For production, use /ws path, for local dev use direct connection
+    // For production, use separate subdomain, for local dev use direct connection
     let wsUrl;
     if (host === 'localhost' || host === '127.0.0.1') {
       wsUrl = `${protocol}//${host}:8080`; // Local dev
     } else {
-      wsUrl = `${protocol}//${host}${port}/ws`; // Production with ingress
+      wsUrl = `${protocol}//bombermanws.theclusterflux.com`; // Production with separate subdomain
     }
     
     console.log('Connecting to:', wsUrl);
