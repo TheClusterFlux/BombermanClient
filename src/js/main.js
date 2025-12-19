@@ -341,16 +341,11 @@ class BombermanClient {
   
   // Start the client-side prediction render loop for smooth movement
   startPredictionLoop() {
-    if (this.predictionLoopRunning) {
-      console.log('[PredictionLoop] Already running');
-      return;
-    }
+    if (this.predictionLoopRunning) return;
     this.predictionLoopRunning = true;
-    console.log('[PredictionLoop] Starting prediction render loop');
     
     const loop = () => {
       if (!this.gameState || this.gameState.gameOver) {
-        console.log('[PredictionLoop] Stopping - no gameState or game over');
         this.predictionLoopRunning = false;
         return;
       }

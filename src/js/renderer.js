@@ -47,16 +47,13 @@ const Renderer = {
     // Draw upgrades
     this.drawUpgrades(gameState.map.upgrades);
     
-    // Draw bombs (including pending bombs from prediction)
-    const allBombs = (typeof Prediction !== 'undefined') 
-      ? Prediction.getAllBombs(gameState.bombs)
-      : gameState.bombs;
-    this.drawBombs(allBombs);
+    // Draw bombs (server authoritative)
+    this.drawBombs(gameState.bombs);
     
     // Draw explosions
     this.drawExplosions(gameState.explosions);
     
-    // Draw players (using predicted position for local player)
+    // Draw players (using predicted/interpolated positions)
     this.drawPlayers(gameState.players, currentPlayerId);
   },
   
@@ -205,13 +202,13 @@ const Renderer = {
     players.forEach((player, index) => {
       if (!player.alive) return;
       
-      // Use predicted position for local player (client-side prediction)
+      // Use predicted/interpolated position
       let pos = { x: player.x, y: player.y };
       if (typeof Prediction !== 'undefined') {
         pos = Prediction.getPlayerPosition(player, currentPlayerId);
       }
       
-      // Players now have fractional positions - multiply by tileSize directly
+      // Players have fractional positions - multiply by tileSize directly
       const centerX = pos.x * this.tileSize;
       const centerY = pos.y * this.tileSize;
       const radius = this.tileSize / 3; // Smaller player size
