@@ -262,12 +262,14 @@ const UI = {
     // Pre-fill username if saved
     if (savedUsername) {
       document.getElementById('username-input').value = savedUsername;
-    }
-    
-    // Auto-connect if we have a saved lobby to rejoin
-    if (savedLobbyId && savedUsername) {
-      console.log('Found saved session, auto-connecting...');
-      this.showConnectionStatus('Reconnecting...', 'success');
+      
+      // Auto-connect with saved username
+      console.log('Found saved username, auto-connecting...');
+      if (savedLobbyId) {
+        this.showConnectionStatus('Reconnecting to lobby...', 'success');
+      } else {
+        this.showConnectionStatus('Reconnecting...', 'success');
+      }
       client.connect(savedUsername);
     }
   }
