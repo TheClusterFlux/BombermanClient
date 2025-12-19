@@ -1,17 +1,82 @@
 // Main WebSocket client and game state management
 
+// Session storage keys
+const STORAGE_KEYS = {
+  USERNAME: 'bomberman_username',
+  LOBBY_ID: 'bomberman_lobby_id'
+};
+
 class BombermanClient {
   constructor() {
     this.ws = null;
     this.playerId = null;
-    this.username = 'Player';
+    this.username = this.loadUsername() || 'Player';
     this.currentLobby = null;
     this.gameState = null;
     this.availableMaps = [];
     this.connected = false;
+    this.pendingRejoin = this.loadLobbyId(); // Lobby to rejoin after connecting
+    this.pendingUsername = null; // Username to set after connection opens
   }
   
-  connect() {
+  // LocalStorage helpers
+  loadUsername() {
+    try {
+      return localStorage.getItem(STORAGE_KEYS.USERNAME);
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  saveUsername(username) {
+    try {
+      localStorage.setItem(STORAGE_KEYS.USERNAME, username);
+    } catch (e) {
+      console.warn('Could not save username to localStorage');
+    }
+  }
+  
+  loadLobbyId() {
+    try {
+      return localStorage.getItem(STORAGE_KEYS.LOBBY_ID);
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  saveLobbyId(lobbyId) {
+    try {
+      if (lobbyId) {
+        localStorage.setItem(STORAGE_KEYS.LOBBY_ID, lobbyId);
+      } else {
+        localStorage.removeItem(STORAGE_KEYS.LOBBY_ID);
+      }
+    } catch (e) {
+      console.warn('Could not save lobby ID to localStorage');
+    }
+  }
+  
+  clearSession() {
+    try {
+      localStorage.removeItem(STORAGE_KEYS.LOBBY_ID);
+    } catch (e) {
+      // Ignore
+    }
+    this.pendingRejoin = null;
+  }
+  
+  connect(usernameToSet) {
+    // Prevent double-connect
+    if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {
+      console.log('Already connected or connecting');
+      return;
+    }
+    
+    // Store username to set after connection opens
+    if (usernameToSet) {
+      this.pendingUsername = usernameToSet;
+    }
+    
     // Determine WebSocket URL based on current location
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.hostname;
@@ -32,6 +97,12 @@ class BombermanClient {
       console.log('Connected to server');
       this.connected = true;
       UI.showConnectionStatus('Connected!', 'success');
+      
+      // Set username now that connection is open
+      if (this.pendingUsername) {
+        this.setUsername(this.pendingUsername);
+        this.pendingUsername = null;
+      }
     };
     
     this.ws.onmessage = (event) => {
@@ -68,10 +139,19 @@ class BombermanClient {
         
       case 'USERNAME_SET':
         this.username = message.username;
+        this.saveUsername(this.username);
         UI.setUsername(this.username);
         this.requestMaps();
-        UI.showScreen('lobby-browser');
-        this.refreshLobbies();
+        
+        // Check if we should rejoin a lobby
+        if (this.pendingRejoin) {
+          console.log('Attempting to rejoin lobby:', this.pendingRejoin);
+          this.joinLobby(this.pendingRejoin);
+          this.pendingRejoin = null;
+        } else {
+          UI.showScreen('lobby-browser');
+          this.refreshLobbies();
+        }
         break;
         
       case 'MAP_LIST':
@@ -90,12 +170,15 @@ class BombermanClient {
         this.currentLobby = message.lobbyInfo || message.lobby;
         UI.updateLobbyRoom(this.currentLobby, this.playerId);
         if (message.type === 'LOBBY_JOINED') {
+          // Save lobby ID for session persistence
+          this.saveLobbyId(this.currentLobby.id);
           UI.showScreen('lobby-room');
         }
         break;
         
       case 'LEFT_LOBBY':
         this.currentLobby = null;
+        this.clearSession(); // Clear saved lobby ID
         UI.showScreen('lobby-browser');
         this.refreshLobbies();
         break;
@@ -136,7 +219,17 @@ class BombermanClient {
         
       case 'ERROR':
         console.error('Server error:', message.message);
-        alert(message.message);
+        // If join failed (possibly stale lobby), clear session and show browser
+        if (message.message && message.message.toLowerCase().includes('join')) {
+          this.clearSession();
+          UI.showScreen('lobby-browser');
+          this.refreshLobbies();
+          // Don't show alert for stale lobby - just show status message
+          UI.showConnectionStatus('Lobby no longer available', 'error');
+        } else {
+          // Show alert for other errors
+          alert(message.message);
+        }
         break;
     }
   }
@@ -196,6 +289,7 @@ class BombermanClient {
   }
   
   leaveLobby() {
+    this.clearSession(); // Clear saved lobby before leaving
     this.send({
       type: 'LEAVE_LOBBY'
     });

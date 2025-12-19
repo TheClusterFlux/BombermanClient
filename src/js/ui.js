@@ -6,11 +6,7 @@ const UI = {
     // Connection screen
     document.getElementById('connect-btn').addEventListener('click', () => {
       const username = document.getElementById('username-input').value.trim() || 'Player';
-      client.connect();
-      // Wait a bit for connection, then set username
-      setTimeout(() => {
-        client.setUsername(username);
-      }, 500);
+      client.connect(username);
     });
     
     // Lobby browser
@@ -256,14 +252,36 @@ const UI = {
     setTimeout(() => {
       this.showScreen('game-over');
     }, 2000);
+  },
+  
+  // Check if we should auto-connect (saved session)
+  checkAutoConnect() {
+    const savedUsername = client.loadUsername();
+    const savedLobbyId = client.loadLobbyId();
+    
+    // Pre-fill username if saved
+    if (savedUsername) {
+      document.getElementById('username-input').value = savedUsername;
+    }
+    
+    // Auto-connect if we have a saved lobby to rejoin
+    if (savedLobbyId && savedUsername) {
+      console.log('Found saved session, auto-connecting...');
+      this.showConnectionStatus('Reconnecting...', 'success');
+      client.connect(savedUsername);
+    }
   }
 };
 
 // Initialize UI when page loads
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => UI.init());
+  document.addEventListener('DOMContentLoaded', () => {
+    UI.init();
+    UI.checkAutoConnect();
+  });
 } else {
   UI.init();
+  UI.checkAutoConnect();
 }
 
 
