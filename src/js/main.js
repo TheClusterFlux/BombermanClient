@@ -17,6 +17,7 @@ class BombermanClient {
     this.connected = false;
     this.pendingRejoin = this.loadLobbyId(); // Lobby to rejoin after connecting
     this.pendingUsername = null; // Username to set after connection opens
+    this.predictionLoopRunning = false; // Track prediction render loop
   }
   
   // LocalStorage helpers
@@ -179,6 +180,11 @@ class BombermanClient {
       case 'LEFT_LOBBY':
         this.currentLobby = null;
         this.clearSession(); // Clear saved lobby ID
+        // Reset prediction state when leaving lobby
+        if (typeof Prediction !== 'undefined') {
+          Prediction.reset();
+        }
+        this.predictionLoopRunning = false;
         UI.showScreen('lobby-browser');
         this.refreshLobbies();
         break;
@@ -197,6 +203,16 @@ class BombermanClient {
         
         if (needsInit) {
           Renderer.init(this.gameState.map.width, this.gameState.map.height);
+          // Start client-side prediction render loop
+          this.startPredictionLoop();
+        }
+        
+        // Reconcile client-side prediction with server state
+        if (typeof Prediction !== 'undefined') {
+          const serverPlayer = this.gameState.players.find(p => p.id === this.playerId);
+          if (serverPlayer) {
+            Prediction.reconcile(serverPlayer, this.gameState);
+          }
         }
         
         // Always show game screen when receiving game state
@@ -205,6 +221,8 @@ class BombermanClient {
           UI.showScreen('game');
         }
         
+        // Render is now handled by the prediction loop for smoother updates
+        // But we still render here as a fallback and for initial state
         Renderer.render(this.gameState, this.playerId);
         UI.updatePlayerStats(this.gameState, this.playerId);
         break;
@@ -251,6 +269,11 @@ class BombermanClient {
           
         case 'GAME_OVER':
           console.log('Game over!', event.winner);
+          // Reset prediction state
+          if (typeof Prediction !== 'undefined') {
+            Prediction.reset();
+          }
+          this.predictionLoopRunning = false;
           UI.showGameOver(event.winner);
           break;
       }
@@ -313,6 +336,31 @@ class BombermanClient {
       type: 'PLAYER_ACTION',
       action: action
     });
+  }
+  
+  // Start the client-side prediction render loop for smooth movement
+  startPredictionLoop() {
+    if (this.predictionLoopRunning) return;
+    this.predictionLoopRunning = true;
+    
+    const loop = () => {
+      if (!this.gameState || this.gameState.gameOver) {
+        this.predictionLoopRunning = false;
+        return;
+      }
+      
+      // Update prediction physics
+      if (typeof Prediction !== 'undefined') {
+        Prediction.update(this.gameState);
+      }
+      
+      // Render with predicted positions
+      Renderer.render(this.gameState, this.playerId);
+      
+      requestAnimationFrame(loop);
+    };
+    
+    requestAnimationFrame(loop);
   }
 }
 

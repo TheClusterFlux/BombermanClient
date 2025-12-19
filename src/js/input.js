@@ -52,6 +52,11 @@ const Input = {
     if (left) vx -= 1;
     if (right) vx += 1;
     
+    // Apply input to local prediction immediately (client-side prediction)
+    if (typeof Prediction !== 'undefined') {
+      Prediction.applyInput(vx, vy, client.gameState);
+    }
+    
     // Determine direction string for tracking
     let direction = `${vx},${vy}`; // e.g., "0,-1" for up, "-1,-1" for up-left, "0,0" for stop
     
@@ -69,6 +74,11 @@ const Input = {
     
     // Handle bomb placement (space bar)
     if (this.keys[' '] && now - this.lastBombTime > this.bombDelay) {
+      // Place bomb locally first (client-side prediction)
+      if (typeof Prediction !== 'undefined') {
+        Prediction.placeBomb(client.gameState);
+      }
+      // Send to server
       client.sendPlayerAction({
         type: 'PLACE_BOMB'
       });
