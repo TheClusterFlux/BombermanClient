@@ -203,8 +203,6 @@ class BombermanClient {
         
         if (needsInit) {
           Renderer.init(this.gameState.map.width, this.gameState.map.height);
-          // Start client-side prediction render loop
-          this.startPredictionLoop();
         }
         
         // Reconcile client-side prediction with server state
@@ -214,6 +212,9 @@ class BombermanClient {
             Prediction.reconcile(serverPlayer, this.gameState);
           }
         }
+        
+        // Always start prediction loop when receiving game state (if not already running)
+        this.startPredictionLoop();
         
         // Always show game screen when receiving game state
         const currentScreen = document.querySelector('.screen.active');
@@ -340,11 +341,16 @@ class BombermanClient {
   
   // Start the client-side prediction render loop for smooth movement
   startPredictionLoop() {
-    if (this.predictionLoopRunning) return;
+    if (this.predictionLoopRunning) {
+      console.log('[PredictionLoop] Already running');
+      return;
+    }
     this.predictionLoopRunning = true;
+    console.log('[PredictionLoop] Starting prediction render loop');
     
     const loop = () => {
       if (!this.gameState || this.gameState.gameOver) {
+        console.log('[PredictionLoop] Stopping - no gameState or game over');
         this.predictionLoopRunning = false;
         return;
       }

@@ -17,8 +17,12 @@ const Prediction = {
   // Pending bombs (placed locally, awaiting server confirmation)
   pendingBombs: [],
   
+  // Debug mode
+  debug: true,
+  
   // Initialize prediction for local player
   init(playerId, serverPlayer, gameState) {
+    console.log('[Prediction] Initializing for player:', playerId, 'at', serverPlayer.x, serverPlayer.y);
     this.localPlayer = {
       id: playerId,
       x: serverPlayer.x,
@@ -34,22 +38,34 @@ const Prediction = {
   
   // Update local player with input (called from Input.pollInput)
   applyInput(vx, vy, gameState) {
-    if (!this.localPlayer || !this.localPlayer.alive) return;
+    if (!this.localPlayer) {
+      if (this.debug) console.log('[Prediction] applyInput: no localPlayer yet');
+      return;
+    }
+    if (!this.localPlayer.alive) return;
     
     // Normalize diagonal movement (same as server)
     const length = Math.sqrt(vx * vx + vy * vy);
     if (length > 0) {
       this.localPlayer.velocityX = (vx / length) * this.localPlayer.speed;
       this.localPlayer.velocityY = (vy / length) * this.localPlayer.speed;
+      if (this.debug && !this._lastLoggedVelocity) {
+        console.log('[Prediction] applyInput: velocity set to', this.localPlayer.velocityX.toFixed(2), this.localPlayer.velocityY.toFixed(2));
+        this._lastLoggedVelocity = true;
+      }
     } else {
       this.localPlayer.velocityX = 0;
       this.localPlayer.velocityY = 0;
+      this._lastLoggedVelocity = false;
     }
   },
   
   // Update position based on velocity (called every frame)
   update(gameState) {
-    if (!this.localPlayer || !this.localPlayer.alive) return;
+    if (!this.localPlayer) {
+      return;
+    }
+    if (!this.localPlayer.alive) return;
     if (!gameState || !gameState.map) return;
     
     const now = performance.now();
@@ -61,6 +77,9 @@ const Prediction = {
     
     if (this.localPlayer.velocityX === 0 && this.localPlayer.velocityY === 0) return;
     
+    const oldX = this.localPlayer.x;
+    const oldY = this.localPlayer.y;
+    
     // Calculate new position
     const newX = this.localPlayer.x + this.localPlayer.velocityX * cappedDelta;
     const newY = this.localPlayer.y + this.localPlayer.velocityY * cappedDelta;
@@ -69,18 +88,25 @@ const Prediction = {
     if (this.canMoveTo(newX, newY, gameState)) {
       this.localPlayer.x = newX;
       this.localPlayer.y = newY;
-      return;
+    } else {
+      // If diagonal blocked, try each axis independently (wall sliding)
+      const canMoveX = this.canMoveTo(newX, this.localPlayer.y, gameState);
+      const canMoveY = this.canMoveTo(this.localPlayer.x, newY, gameState);
+      
+      if (canMoveX) {
+        this.localPlayer.x = newX;
+      }
+      if (canMoveY) {
+        this.localPlayer.y = newY;
+      }
     }
     
-    // If diagonal blocked, try each axis independently (wall sliding)
-    const canMoveX = this.canMoveTo(newX, this.localPlayer.y, gameState);
-    const canMoveY = this.canMoveTo(this.localPlayer.x, newY, gameState);
-    
-    if (canMoveX) {
-      this.localPlayer.x = newX;
-    }
-    if (canMoveY) {
-      this.localPlayer.y = newY;
+    // Debug: log if we actually moved
+    if (this.debug && (this.localPlayer.x !== oldX || this.localPlayer.y !== oldY)) {
+      if (!this._moveLogThrottle || now - this._moveLogThrottle > 500) {
+        console.log('[Prediction] Moved to:', this.localPlayer.x.toFixed(2), this.localPlayer.y.toFixed(2));
+        this._moveLogThrottle = now;
+      }
     }
   },
   
