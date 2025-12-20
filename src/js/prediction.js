@@ -7,7 +7,7 @@ const Prediction = {
   localPlayer: null,
   
   // Other players' interpolation state
-  otherPlayers: new Map(), // playerId -> { x, y, targetX, targetY, velocityX, velocityY }
+  otherPlayers: new Map(), // playerId -> { x, y, targetX, targetY, lastX, lastY }
   
   // Config
   config: {
@@ -17,11 +17,18 @@ const Prediction = {
     otherPlayerLerpSpeed: 10, // How fast others lerp to target (per second)
     correctionLerpSpeed: 5,   // How fast we correct local player
     correctionThreshold: 0.1, // Only correct if diff > this (tiles)
-    snapThreshold: 3.0        // Snap instantly if diff > this (teleport/respawn)
+    snapThreshold: 3.0,       // Snap instantly if diff > this (teleport/respawn)
+    serverTickRate: 60        // Expected server tick rate
   },
   
-  // Timing
+  // Timing & sync
   lastUpdateTime: 0,
+  lastServerTick: 0,
+  lastServerTime: 0,
+  lastReceiveTime: 0,
+  estimatedLatency: 0,
+  jitterBuffer: [],  // Track recent latency samples for jitter calculation
+  maxJitterSamples: 10,
   
   // Initialize for local player
   init(playerId, serverPlayer) {
@@ -175,6 +182,34 @@ const Prediction = {
   
   // Reconcile with server state
   reconcile(serverPlayer, gameState) {
+    const now = performance.now();
+    
+    // Track tick timing for latency estimation
+    if (gameState.tick && gameState.serverTime) {
+      const tickDiff = gameState.tick - this.lastServerTick;
+      
+      if (this.lastServerTick > 0 && tickDiff > 0) {
+        // Calculate latency based on time between ticks
+        const expectedInterval = (1000 / this.config.serverTickRate) * tickDiff;
+        const actualInterval = now - this.lastReceiveTime;
+        const latencySample = actualInterval - expectedInterval;
+        
+        // Add to jitter buffer
+        this.jitterBuffer.push(latencySample);
+        if (this.jitterBuffer.length > this.maxJitterSamples) {
+          this.jitterBuffer.shift();
+        }
+        
+        // Calculate average jitter
+        const avgJitter = this.jitterBuffer.reduce((a, b) => a + Math.abs(b), 0) / this.jitterBuffer.length;
+        this.estimatedLatency = avgJitter;
+      }
+      
+      this.lastServerTick = gameState.tick;
+      this.lastServerTime = gameState.serverTime;
+      this.lastReceiveTime = now;
+    }
+    
     if (!this.localPlayer) {
       this.init(serverPlayer.id, serverPlayer);
       return;
@@ -202,7 +237,9 @@ const Prediction = {
       this.localPlayer.y = serverPlayer.y;
     } else if (distance > this.config.correctionThreshold) {
       // Gentle correction - lerp toward server
-      const correction = this.config.correctionLerpSpeed * 0.016; // ~60fps
+      // Adjust correction speed based on jitter (more jitter = slower correction)
+      const jitterFactor = Math.max(0.5, 1 - (this.estimatedLatency / 100));
+      const correction = this.config.correctionLerpSpeed * 0.016 * jitterFactor;
       this.localPlayer.x += dx * Math.min(correction, 0.5);
       this.localPlayer.y += dy * Math.min(correction, 0.5);
     }
@@ -212,8 +249,12 @@ const Prediction = {
     for (const player of gameState.players) {
       if (this.localPlayer && player.id === this.localPlayer.id) continue;
       
-      const other = this.otherPlayers.get(player.id);
+      let other = this.otherPlayers.get(player.id);
       if (other) {
+        // Store previous target for velocity estimation
+        other.lastX = other.targetX;
+        other.lastY = other.targetY;
+        
         // Check if it's a big jump (teleport/respawn)
         const otherDist = Math.sqrt(
           Math.pow(player.x - other.targetX, 2) + 
@@ -263,5 +304,25 @@ const Prediction = {
     this.localPlayer = null;
     this.otherPlayers.clear();
     this.lastUpdateTime = 0;
+    this.lastServerTick = 0;
+    this.lastServerTime = 0;
+    this.lastReceiveTime = 0;
+    this.estimatedLatency = 0;
+    this.jitterBuffer = [];
+  },
+  
+  // Get sync stats for debugging
+  getSyncStats() {
+    return {
+      lastTick: this.lastServerTick,
+      estimatedLatency: this.estimatedLatency.toFixed(1) + 'ms',
+      jitter: this.jitterBuffer.length > 0 
+        ? (Math.max(...this.jitterBuffer) - Math.min(...this.jitterBuffer)).toFixed(1) + 'ms'
+        : '0ms',
+      localPlayer: this.localPlayer ? {
+        x: this.localPlayer.x.toFixed(2),
+        y: this.localPlayer.y.toFixed(2)
+      } : null
+    };
   }
 };
