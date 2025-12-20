@@ -251,6 +251,16 @@ class BombermanClient {
         UI.showScreen('lobby-room');
         break;
         
+      case 'KICKED_FROM_LOBBY':
+        // We were kicked from the lobby
+        console.log('Kicked from lobby:', message.message);
+        this.currentLobby = null;
+        this.clearSession();
+        UI.showConnectionStatus('You were kicked from the lobby', 'error');
+        UI.showScreen('lobby-browser');
+        this.refreshLobbies();
+        break;
+        
       case 'ERROR':
         console.error('Server error:', message.message);
         // If join failed (possibly stale lobby), clear session and show browser
@@ -344,6 +354,19 @@ class BombermanClient {
   resetSettings() {
     this.send({
       type: 'RESET_SETTINGS'
+    });
+  }
+  
+  returnToLobby() {
+    this.send({
+      type: 'RETURN_TO_LOBBY_REQUEST'
+    });
+  }
+  
+  kickPlayer(playerId) {
+    this.send({
+      type: 'KICK_PLAYER',
+      playerId: playerId
     });
   }
   

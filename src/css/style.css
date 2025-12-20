@@ -262,6 +262,32 @@ h3 {
   align-items: center;
 }
 
+.player-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-kick {
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.btn-kick:hover {
+  background: #dc2626;
+  transform: scale(1.1);
+}
+
 .player-name {
   font-weight: 600;
   color: #333;
@@ -400,6 +426,17 @@ h3 {
 .draw {
   color: #ef4444;
   font-weight: 700;
+}
+
+.game-over-buttons {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.game-over-buttons .btn {
+  min-width: 200px;
 }
 
 /* Lobby Settings Panel */

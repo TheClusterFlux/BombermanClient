@@ -58,9 +58,15 @@ const UI = {
     // Settings sliders
     this.initSettingsSliders();
     
-    // Game over
-    document.getElementById('return-lobby-btn').addEventListener('click', () => {
-      Renderer.reset(); // Reset renderer for next game
+    // Game over - return to lobby
+    document.getElementById('return-to-lobby-btn').addEventListener('click', () => {
+      Renderer.reset();
+      client.returnToLobby();
+    });
+    
+    // Game over - leave and browse
+    document.getElementById('return-to-browser-btn').addEventListener('click', () => {
+      Renderer.reset();
       client.leaveLobby();
       this.showScreen('lobby-browser');
       client.refreshLobbies();
@@ -174,6 +180,7 @@ const UI = {
     
     const playersList = document.getElementById('players-list');
     playersList.innerHTML = '';
+    const isHost = lobby.hostId === currentPlayerId;
     
     lobby.players.forEach(player => {
       const item = document.createElement('div');
@@ -188,10 +195,29 @@ const UI = {
         statusHTML = '<span class="player-status not-ready">Not Ready</span>';
       }
       
+      // Show kick button for host (but not for themselves)
+      let kickHTML = '';
+      if (isHost && player.id !== currentPlayerId) {
+        kickHTML = `<button class="btn-kick" data-player-id="${player.id}" title="Kick player">✕</button>`;
+      }
+      
       item.innerHTML = `
         <span class="player-name">${player.username}${player.id === currentPlayerId ? ' (You)' : ''}</span>
-        ${statusHTML}
+        <div class="player-actions">
+          ${statusHTML}
+          ${kickHTML}
+        </div>
       `;
+      
+      // Add kick event listener
+      const kickBtn = item.querySelector('.btn-kick');
+      if (kickBtn) {
+        kickBtn.addEventListener('click', () => {
+          if (confirm(`Kick ${player.username} from the lobby?`)) {
+            client.kickPlayer(player.id);
+          }
+        });
+      }
       
       playersList.appendChild(item);
     });
@@ -352,9 +378,10 @@ const UI = {
       `;
     }
     
+    // Short delay to let final game state render, then show game over
     setTimeout(() => {
       this.showScreen('game-over');
-    }, 2000);
+    }, 1500);
   },
   
   // Check if we should auto-connect (saved session)
