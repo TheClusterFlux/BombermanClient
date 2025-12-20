@@ -164,62 +164,50 @@ const Prediction = {
       return;
     }
     
-    // CORNER ASSIST: Nudge player into lanes when hitting corners
-    const cornerAssist = 0.35; // How close to corner edge to assist
-    const nudgeSpeed = this.localPlayer.speed * 0.5;
+    // CORNER ASSIST: Nudge player perpendicular to movement when hitting corners
+    const cornerAssist = 0.4; // How close to corner edge to assist
+    const nudgeSpeed = this.localPlayer.speed * 0.6;
     const nudgeAmount = nudgeSpeed * dt;
     
     const canMoveX = this.canMoveToTile(newX, this.localPlayer.y, gameState.map, gameState.bombs);
     const canMoveY = this.canMoveToTile(this.localPlayer.x, newY, gameState.map, gameState.bombs);
     
-    if (canMoveX) {
-      this.localPlayer.x = newX;
-      // Moving horizontally - nudge vertically toward lane center
-      if (!canMoveY && vy !== 0) {
-        const tileY = Math.floor(this.localPlayer.y);
-        const offsetY = this.localPlayer.y - (tileY + 0.5);
-        if (Math.abs(offsetY) < cornerAssist && Math.abs(offsetY) > 0.01) {
-          this.localPlayer.y -= Math.sign(offsetY) * Math.min(nudgeAmount, Math.abs(offsetY));
-        }
-      }
-    }
+    // Apply valid axis movement
+    if (canMoveX) this.localPlayer.x = newX;
+    if (canMoveY) this.localPlayer.y = newY;
     
-    if (canMoveY) {
-      this.localPlayer.y = newY;
-      // Moving vertically - nudge horizontally toward lane center
-      if (!canMoveX && vx !== 0) {
-        const tileX = Math.floor(this.localPlayer.x);
-        const offsetX = this.localPlayer.x - (tileX + 0.5);
-        if (Math.abs(offsetX) < cornerAssist && Math.abs(offsetX) > 0.01) {
-          this.localPlayer.x -= Math.sign(offsetX) * Math.min(nudgeAmount, Math.abs(offsetX));
-        }
-      }
-    }
+    // CORNER ASSIST: When blocked, nudge PERPENDICULAR to find opening
     
-    // If completely blocked, try corner assist to slide around
-    if (!canMoveX && !canMoveY) {
+    // Blocked vertically (can't move up/down) - nudge horizontally
+    if (!canMoveY && vy !== 0) {
       const tileX = Math.floor(this.localPlayer.x);
-      const tileY = Math.floor(this.localPlayer.y);
       const offsetX = this.localPlayer.x - (tileX + 0.5);
-      const offsetY = this.localPlayer.y - (tileY + 0.5);
       
-      // Try nudging horizontally to get around vertical obstacle
-      if (vy !== 0 && Math.abs(offsetX) < cornerAssist) {
-        const testX = this.localPlayer.x - Math.sign(offsetX) * nudgeAmount;
+      if (Math.abs(offsetX) < cornerAssist && Math.abs(offsetX) > 0.01) {
+        // Nudge toward tile center horizontally to slip into lane
+        const nudge = Math.sign(offsetX) * Math.min(nudgeAmount, Math.abs(offsetX));
+        const testX = this.localPlayer.x - nudge;
+        // Only nudge if it would help us move in desired direction
         if (this.canMoveToTile(testX, newY, gameState.map, gameState.bombs)) {
           this.localPlayer.x = testX;
           this.localPlayer.y = newY;
-          return;
         }
       }
+    }
+    
+    // Blocked horizontally (can't move left/right) - nudge vertically
+    if (!canMoveX && vx !== 0) {
+      const tileY = Math.floor(this.localPlayer.y);
+      const offsetY = this.localPlayer.y - (tileY + 0.5);
       
-      // Try nudging vertically to get around horizontal obstacle
-      if (vx !== 0 && Math.abs(offsetY) < cornerAssist) {
-        const testY = this.localPlayer.y - Math.sign(offsetY) * nudgeAmount;
+      if (Math.abs(offsetY) < cornerAssist && Math.abs(offsetY) > 0.01) {
+        // Nudge toward tile center vertically to slip into lane
+        const nudge = Math.sign(offsetY) * Math.min(nudgeAmount, Math.abs(offsetY));
+        const testY = this.localPlayer.y - nudge;
+        // Only nudge if it would help us move in desired direction
         if (this.canMoveToTile(newX, testY, gameState.map, gameState.bombs)) {
           this.localPlayer.x = newX;
           this.localPlayer.y = testY;
-          return;
         }
       }
     }
