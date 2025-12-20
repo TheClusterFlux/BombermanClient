@@ -3,7 +3,7 @@
 const Input = {
   keys: {},
   lastMoveTime: 0,
-  moveDelay: 100, // ms between move updates
+  moveDelay: 50, // ms between move updates (send position frequently)
   lastBombTime: 0,
   bombDelay: 200, // ms between bomb placements
   lastDirection: null, // Track last sent direction
@@ -62,11 +62,17 @@ const Input = {
     
     // Send movement update if direction changed or periodically
     if (direction !== this.lastDirection || now - this.lastMoveTime > this.moveDelay) {
-      // Send the raw velocity vector - server will handle diagonal movement
+      // Get current predicted position to send to server
+      const localPos = Prediction.getLocalPosition();
+      
+      // Send velocity AND current position - server will validate
       client.sendPlayerAction({
         type: 'MOVE',
         vx: vx,
-        vy: vy
+        vy: vy,
+        x: localPos ? localPos.x : undefined,
+        y: localPos ? localPos.y : undefined,
+        clientTick: localPos ? localPos.tick : undefined
       });
       this.lastDirection = direction;
       this.lastMoveTime = now;

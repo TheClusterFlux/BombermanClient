@@ -20,10 +20,10 @@ const Prediction = {
     defaultSpeed: 3,
     playerRadius: 0.35,
     serverTickRate: 60,
-    // Reconciliation settings
-    correctionThreshold: 0.05, // Only correct if diff > this at THAT tick
+    // Reconciliation settings - be very lenient since we're sending positions
+    correctionThreshold: 0.5,  // Only correct if server explicitly rejects (>0.5 tile diff)
     otherPlayerLerpSpeed: 12,  // How fast others lerp
-    snapThreshold: 3.0         // Snap if diff > this (teleport)
+    snapThreshold: 2.0         // Snap if teleported/major desync
   },
   
   // Timing & sync
@@ -233,7 +233,8 @@ const Prediction = {
     }
   },
   
-  // Reconcile with server - compare against PAST position
+  // Reconcile with server - client authoritative approach
+  // Server only matters if it explicitly rejected our position
   reconcile(serverPlayer, gameState) {
     const serverTick = gameState.tick || 0;
     
@@ -242,58 +243,51 @@ const Prediction = {
       return;
     }
     
-    // Update stats
+    // Update stats that server controls
     this.localPlayer.speed = serverPlayer.speed || this.config.defaultSpeed;
     this.localPlayer.alive = serverPlayer.alive;
     
+    // If we died, snap to server position
     if (!serverPlayer.alive) {
       this.localPlayer.x = serverPlayer.x;
       this.localPlayer.y = serverPlayer.y;
+      this.positionHistory = [];
       return;
     }
     
-    // Find our position at the server's tick
-    const historicalPos = this.positionHistory.find(p => p.tick === serverTick);
+    // Calculate distance between our CURRENT position and server's position
+    // (Server should have accepted our position if valid, so any diff = rejection)
+    const dx = serverPlayer.x - this.localPlayer.x;
+    const dy = serverPlayer.y - this.localPlayer.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
     
-    if (historicalPos) {
-      // Compare server position to where WE thought we were at that tick
-      const dx = serverPlayer.x - historicalPos.x;
-      const dy = serverPlayer.y - historicalPos.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+    if (distance > this.config.snapThreshold) {
+      // Major desync - teleported, respawned, or serious issue
+      console.log('[Prediction] Major desync - snapping:', distance.toFixed(2), 'tiles');
+      this.localPlayer.x = serverPlayer.x;
+      this.localPlayer.y = serverPlayer.y;
+      this.positionHistory = [];
+      this.currentTick = serverTick;
+      this.recordPosition();
+    } else if (distance > this.config.correctionThreshold) {
+      // Server rejected our position - probably collision with another player
+      // Only apply correction if significant
+      console.log('[Prediction] Server correction:', distance.toFixed(3), 'tiles - likely player collision');
       
-      if (distance > this.config.snapThreshold) {
-        // Major desync - snap and clear history
-        console.log('[Prediction] Major desync at tick', serverTick, '- snapping (', distance.toFixed(2), 'tiles)');
-        this.localPlayer.x = serverPlayer.x;
-        this.localPlayer.y = serverPlayer.y;
-        this.positionHistory = [];
-        this.currentTick = serverTick;
-        this.recordPosition();
-      } else if (distance > this.config.correctionThreshold) {
-        // We were wrong at that tick - apply correction to current position
-        // The error at tick N propagates to now, so apply the same delta
-        console.log('[Prediction] Correction needed at tick', serverTick, ':', distance.toFixed(3), 'tiles');
-        this.localPlayer.x += dx;
-        this.localPlayer.y += dy;
-        
-        // Update all future history entries with this correction
-        for (const pos of this.positionHistory) {
-          if (pos.tick > serverTick) {
-            pos.x += dx;
-            pos.y += dy;
-          }
-        }
-      }
-      // If within threshold at that tick, we were correct - do nothing!
-    } else {
-      // No history for that tick (too old or first update)
-      // Just sync our tick counter
-      if (serverTick > this.currentTick) {
-        this.currentTick = serverTick;
-      }
+      // Smoothly blend toward server position instead of snapping
+      // This makes collisions feel less jarring
+      const blendFactor = 0.3;
+      this.localPlayer.x += dx * blendFactor;
+      this.localPlayer.y += dy * blendFactor;
+    }
+    // If within threshold, we're in sync - trust our local position!
+    
+    // Keep tick counter in sync
+    if (serverTick > this.currentTick) {
+      this.currentTick = serverTick;
     }
     
-    // Prune history - server has confirmed up to serverTick, we only need ticks AFTER
+    // Prune old history
     this.positionHistory = this.positionHistory.filter(p => p.tick > serverTick);
     this.inputHistory = this.inputHistory.filter(i => i.tick > serverTick);
     
@@ -320,6 +314,16 @@ const Prediction = {
         other.targetY = player.y;
       }
     }
+  },
+  
+  // Get local player position with tick (for sending to server)
+  getLocalPosition() {
+    if (!this.localPlayer) return null;
+    return {
+      x: this.localPlayer.x,
+      y: this.localPlayer.y,
+      tick: this.currentTick
+    };
   },
   
   // Get position for rendering
