@@ -226,7 +226,6 @@ const UI = {
     const startBtn = document.getElementById('start-game-btn');
     const hostSettings = document.getElementById('host-settings');
     const settingsDisplay = document.getElementById('settings-display');
-    const isHost = lobby.hostId === currentPlayerId;
     
     if (isHost) {
       startBtn.style.display = 'block';
