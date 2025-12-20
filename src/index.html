@@ -78,6 +78,54 @@
             <div id="players-list" class="players-list"></div>
           </div>
           
+          <!-- Host Settings Panel -->
+          <div id="host-settings" class="settings-panel" style="display: none;">
+            <h3>Game Settings</h3>
+            
+            <div class="setting-group">
+              <label for="lobby-map-select">Map:</label>
+              <select id="lobby-map-select"></select>
+            </div>
+            
+            <div class="setting-group">
+              <label for="setting-speed">Player Speed:</label>
+              <input type="range" id="setting-speed" min="1" max="8" step="0.5" value="3">
+              <span id="setting-speed-value">3</span>
+            </div>
+            
+            <div class="setting-group">
+              <label for="setting-bombs">Starting Bombs:</label>
+              <input type="range" id="setting-bombs" min="1" max="5" step="1" value="1">
+              <span id="setting-bombs-value">1</span>
+            </div>
+            
+            <div class="setting-group">
+              <label for="setting-range">Explosion Range:</label>
+              <input type="range" id="setting-range" min="1" max="6" step="1" value="2">
+              <span id="setting-range-value">2</span>
+            </div>
+            
+            <div class="setting-group">
+              <label for="setting-timer">Bomb Timer:</label>
+              <input type="range" id="setting-timer" min="1" max="5" step="0.5" value="3">
+              <span id="setting-timer-value">3s</span>
+            </div>
+            
+            <div class="setting-group">
+              <label for="setting-upgrades">Upgrade Spawn Rate:</label>
+              <input type="range" id="setting-upgrades" min="0" max="100" step="10" value="30">
+              <span id="setting-upgrades-value">30%</span>
+            </div>
+            
+            <button id="reset-settings-btn" class="btn btn-secondary">Reset to Defaults</button>
+          </div>
+          
+          <!-- Current Settings Display (for non-hosts) -->
+          <div id="settings-display" class="settings-display" style="display: none;">
+            <h4>Game Settings</h4>
+            <div id="current-settings-info"></div>
+          </div>
+          
           <div class="lobby-controls">
             <button id="ready-btn" class="btn btn-primary">Ready</button>
             <button id="start-game-btn" class="btn btn-success" style="display: none;">Start Game</button>

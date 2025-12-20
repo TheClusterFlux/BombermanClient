@@ -236,6 +236,21 @@ class BombermanClient {
         // Bomb placement is handled in game state updates
         break;
         
+      case 'RETURN_TO_LOBBY':
+        // Game ended - return to lobby room (not browser)
+        console.log('Returning to lobby after game');
+        this.currentLobby = message.lobbyInfo;
+        // Reset prediction state
+        if (typeof Prediction !== 'undefined') {
+          Prediction.reset();
+        }
+        this.predictionLoopRunning = false;
+        this.gameState = null;
+        Renderer.reset();
+        UI.updateLobbyRoom(this.currentLobby, this.playerId);
+        UI.showScreen('lobby-room');
+        break;
+        
       case 'ERROR':
         console.error('Server error:', message.message);
         // If join failed (possibly stale lobby), clear session and show browser
@@ -309,6 +324,26 @@ class BombermanClient {
     this.send({
       type: 'JOIN_LOBBY',
       lobbyId: lobbyId
+    });
+  }
+  
+  changeMap(mapName) {
+    this.send({
+      type: 'CHANGE_MAP',
+      mapName: mapName
+    });
+  }
+  
+  updateSettings(settings) {
+    this.send({
+      type: 'UPDATE_SETTINGS',
+      settings: settings
+    });
+  }
+  
+  resetSettings() {
+    this.send({
+      type: 'RESET_SETTINGS'
     });
   }
   

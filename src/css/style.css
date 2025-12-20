@@ -402,6 +402,102 @@ h3 {
   font-weight: 700;
 }
 
+/* Lobby Settings Panel */
+.settings-panel {
+  background: #f7f7f7;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.settings-panel h3 {
+  color: #667eea;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #667eea;
+}
+
+.setting-group {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.setting-group label {
+  min-width: 140px;
+  font-weight: 600;
+  color: #555;
+}
+
+.setting-group input[type="range"] {
+  flex: 1;
+  height: 8px;
+  -webkit-appearance: none;
+  background: #ddd;
+  border-radius: 4px;
+  outline: none;
+}
+
+.setting-group input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  background: #667eea;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.setting-group input[type="range"]::-webkit-slider-thumb:hover {
+  background: #5568d3;
+}
+
+.setting-group select {
+  flex: 1;
+  padding: 8px 12px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  background: white;
+}
+
+.setting-group select:focus {
+  border-color: #667eea;
+  outline: none;
+}
+
+.setting-group span {
+  min-width: 50px;
+  text-align: right;
+  font-weight: 600;
+  color: #667eea;
+}
+
+.settings-panel .btn {
+  width: 100%;
+  margin-top: 10px;
+}
+
+/* Settings Display (non-host) */
+.settings-display {
+  background: #f0f0f0;
+  padding: 15px 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.settings-display h4 {
+  color: #667eea;
+  margin-bottom: 10px;
+}
+
+.settings-display p {
+  margin: 5px 0;
+  color: #555;
+  font-size: 14px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .container {

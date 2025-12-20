@@ -46,6 +46,18 @@ const UI = {
       client.startGame();
     });
     
+    // Lobby settings (host only)
+    document.getElementById('lobby-map-select').addEventListener('change', (e) => {
+      client.changeMap(e.target.value);
+    });
+    
+    document.getElementById('reset-settings-btn').addEventListener('click', () => {
+      client.resetSettings();
+    });
+    
+    // Settings sliders
+    this.initSettingsSliders();
+    
     // Game over
     document.getElementById('return-lobby-btn').addEventListener('click', () => {
       Renderer.reset(); // Reset renderer for next game
@@ -92,14 +104,22 @@ const UI = {
   },
   
   populateMapSelect(maps) {
-    const select = document.getElementById('map-select');
-    select.innerHTML = '';
+    // Populate both the create lobby and lobby room map selects
+    const selects = [
+      document.getElementById('map-select'),
+      document.getElementById('lobby-map-select')
+    ];
     
-    maps.forEach(mapName => {
-      const option = document.createElement('option');
-      option.value = mapName;
-      option.textContent = mapName.charAt(0).toUpperCase() + mapName.slice(1);
-      select.appendChild(option);
+    selects.forEach(select => {
+      if (!select) return;
+      select.innerHTML = '';
+      
+      maps.forEach(mapName => {
+        const option = document.createElement('option');
+        option.value = mapName;
+        option.textContent = mapName.charAt(0).toUpperCase() + mapName.slice(1);
+        select.appendChild(option);
+      });
     });
   },
   
@@ -178,15 +198,39 @@ const UI = {
     
     // Show/hide start button for host
     const startBtn = document.getElementById('start-game-btn');
-    if (lobby.hostId === currentPlayerId) {
+    const hostSettings = document.getElementById('host-settings');
+    const settingsDisplay = document.getElementById('settings-display');
+    const isHost = lobby.hostId === currentPlayerId;
+    
+    if (isHost) {
       startBtn.style.display = 'block';
+      hostSettings.style.display = 'block';
+      settingsDisplay.style.display = 'none';
+      
+      // Update map selector
+      const mapSelect = document.getElementById('lobby-map-select');
+      if (mapSelect.value !== lobby.mapName) {
+        mapSelect.value = lobby.mapName;
+      }
+      
+      // Update settings sliders (only if not focused to avoid disrupting user)
+      if (lobby.settings) {
+        this.updateSettingsSliders(lobby.settings);
+      }
     } else {
       startBtn.style.display = 'none';
+      hostSettings.style.display = 'none';
+      settingsDisplay.style.display = 'block';
+      
+      // Show current settings for non-hosts
+      if (lobby.settings) {
+        this.displaySettings(lobby.settings, lobby.mapName);
+      }
     }
     
     // Update ready button for non-hosts
     const readyBtn = document.getElementById('ready-btn');
-    if (lobby.hostId === currentPlayerId) {
+    if (isHost) {
       readyBtn.style.display = 'none';
     } else {
       readyBtn.style.display = 'block';
@@ -203,6 +247,65 @@ const UI = {
       }
     }
   },
+  
+  // Initialize settings sliders with change handlers
+  initSettingsSliders() {
+    const sliders = [
+      { id: 'setting-speed', valueId: 'setting-speed-value', setting: 'playerSpeed', format: v => v },
+      { id: 'setting-bombs', valueId: 'setting-bombs-value', setting: 'bombCount', format: v => v },
+      { id: 'setting-range', valueId: 'setting-range-value', setting: 'explosionRange', format: v => v },
+      { id: 'setting-timer', valueId: 'setting-timer-value', setting: 'bombTimer', format: v => v + 's', multiply: 1000 },
+      { id: 'setting-upgrades', valueId: 'setting-upgrades-value', setting: 'upgradeSpawnChance', format: v => v + '%', divide: 100 }
+    ];
+    
+    sliders.forEach(({ id, valueId, setting, format, multiply, divide }) => {
+      const slider = document.getElementById(id);
+      const valueDisplay = document.getElementById(valueId);
+      
+      slider.addEventListener('input', () => {
+        valueDisplay.textContent = format(slider.value);
+      });
+      
+      slider.addEventListener('change', () => {
+        let value = parseFloat(slider.value);
+        if (multiply) value *= multiply;
+        if (divide) value /= divide;
+        client.updateSettings({ [setting]: value });
+      });
+    });
+  },
+  
+  // Update sliders to match current settings
+  updateSettingsSliders(settings) {
+    const setSlider = (id, valueId, value, format) => {
+      const slider = document.getElementById(id);
+      const display = document.getElementById(valueId);
+      if (document.activeElement !== slider) {
+        slider.value = value;
+        display.textContent = format(value);
+      }
+    };
+    
+    setSlider('setting-speed', 'setting-speed-value', settings.playerSpeed, v => v);
+    setSlider('setting-bombs', 'setting-bombs-value', settings.bombCount, v => v);
+    setSlider('setting-range', 'setting-range-value', settings.explosionRange, v => v);
+    setSlider('setting-timer', 'setting-timer-value', settings.bombTimer / 1000, v => v + 's');
+    setSlider('setting-upgrades', 'setting-upgrades-value', settings.upgradeSpawnChance * 100, v => v + '%');
+  },
+  
+  // Display settings for non-host players
+  displaySettings(settings, mapName) {
+    const container = document.getElementById('current-settings-info');
+    container.innerHTML = `
+      <p><strong>Map:</strong> ${mapName}</p>
+      <p><strong>Speed:</strong> ${settings.playerSpeed}</p>
+      <p><strong>Bombs:</strong> ${settings.bombCount}</p>
+      <p><strong>Range:</strong> ${settings.explosionRange}</p>
+      <p><strong>Timer:</strong> ${settings.bombTimer / 1000}s</p>
+      <p><strong>Upgrades:</strong> ${Math.round(settings.upgradeSpawnChance * 100)}%</p>
+    `;
+  },
+  
   
   updatePlayerStats(gameState, currentPlayerId) {
     const statsDiv = document.getElementById('player-stats');
