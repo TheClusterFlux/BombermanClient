@@ -199,11 +199,12 @@ class BombermanClient {
         // Fix explosion timestamps for clock synchronization
         // Replace server timestamp with client timestamp when we first see an explosion
         const now = Date.now();
-        if (this.gameState.explosions) {
+        if (!this.knownExplosions) this.knownExplosions = new Map();
+        
+        if (this.gameState.explosions && this.gameState.explosions.length > 0) {
           for (const explosion of this.gameState.explosions) {
             // Generate a unique ID for tracking
             const expId = `${explosion.originX}_${explosion.originY}_${explosion.timestamp}`;
-            if (!this.knownExplosions) this.knownExplosions = new Map();
             
             if (!this.knownExplosions.has(expId)) {
               // First time seeing this explosion - use current client time
