@@ -1,38 +1,41 @@
-// Client-side prediction for responsive movement
-// Local player: full client authority, server reconciliation only when needed
-// Other players: smooth interpolation toward server position
+// Client-side prediction with proper server reconciliation
+// Uses position history to compare against past positions, not current
 
 const Prediction = {
   // Local player predicted state
   localPlayer: null,
   
+  // Position history for reconciliation: { tick, x, y, vx, vy }
+  positionHistory: [],
+  maxHistoryLength: 120, // ~2 seconds at 60 ticks
+  
+  // Input history for replay: { tick, vx, vy }
+  inputHistory: [],
+  
   // Other players' interpolation state
-  otherPlayers: new Map(), // playerId -> { x, y, targetX, targetY, lastX, lastY }
+  otherPlayers: new Map(),
   
   // Config
   config: {
     defaultSpeed: 3,
     playerRadius: 0.35,
-    // Interpolation settings
-    otherPlayerLerpSpeed: 10, // How fast others lerp to target (per second)
-    correctionLerpSpeed: 5,   // How fast we correct local player
-    correctionThreshold: 0.1, // Only correct if diff > this (tiles)
-    snapThreshold: 3.0,       // Snap instantly if diff > this (teleport/respawn)
-    serverTickRate: 60        // Expected server tick rate
+    serverTickRate: 60,
+    // Reconciliation settings
+    correctionThreshold: 0.05, // Only correct if diff > this at THAT tick
+    otherPlayerLerpSpeed: 12,  // How fast others lerp
+    snapThreshold: 3.0         // Snap if diff > this (teleport)
   },
   
   // Timing & sync
   lastUpdateTime: 0,
+  currentTick: 0,          // Our estimated current tick
   lastServerTick: 0,
-  lastServerTime: 0,
   lastReceiveTime: 0,
-  estimatedLatency: 0,
-  jitterBuffer: [],  // Track recent latency samples for jitter calculation
-  maxJitterSamples: 10,
+  tickAccumulator: 0,      // For sub-tick timing
   
   // Initialize for local player
-  init(playerId, serverPlayer) {
-    console.log('[Prediction] Init local player:', playerId);
+  init(playerId, serverPlayer, serverTick) {
+    console.log('[Prediction] Init local player:', playerId, 'at tick', serverTick);
     this.localPlayer = {
       id: playerId,
       x: serverPlayer.x,
@@ -42,11 +45,50 @@ const Prediction = {
       velocityY: 0,
       alive: serverPlayer.alive
     };
+    this.currentTick = serverTick || 0;
+    this.lastServerTick = serverTick || 0;
     this.lastUpdateTime = performance.now();
+    this.positionHistory = [];
+    this.inputHistory = [];
     this.otherPlayers.clear();
+    
+    // Record initial position
+    this.recordPosition();
   },
   
-  // Apply input immediately (called every frame from Input)
+  // Record current position in history
+  recordPosition() {
+    if (!this.localPlayer) return;
+    
+    this.positionHistory.push({
+      tick: this.currentTick,
+      x: this.localPlayer.x,
+      y: this.localPlayer.y,
+      vx: this.localPlayer.velocityX,
+      vy: this.localPlayer.velocityY
+    });
+    
+    // Trim old history
+    while (this.positionHistory.length > this.maxHistoryLength) {
+      this.positionHistory.shift();
+    }
+  },
+  
+  // Record input for potential replay
+  recordInput(vx, vy) {
+    this.inputHistory.push({
+      tick: this.currentTick,
+      vx: vx,
+      vy: vy
+    });
+    
+    // Trim old inputs
+    while (this.inputHistory.length > this.maxHistoryLength) {
+      this.inputHistory.shift();
+    }
+  },
+  
+  // Apply input immediately
   applyInput(vx, vy) {
     if (!this.localPlayer || !this.localPlayer.alive) return;
     
@@ -59,9 +101,12 @@ const Prediction = {
       this.localPlayer.velocityX = 0;
       this.localPlayer.velocityY = 0;
     }
+    
+    // Record this input
+    this.recordInput(vx, vy);
   },
   
-  // Update physics (called every frame)
+  // Update physics - runs at 60fps, advances ticks
   update(gameState) {
     if (!gameState || !gameState.map) return;
     
@@ -69,28 +114,40 @@ const Prediction = {
     const deltaTime = Math.min((now - this.lastUpdateTime) / 1000, 0.1);
     this.lastUpdateTime = now;
     
-    // Update local player position
-    this.updateLocalPlayer(deltaTime, gameState);
+    // Accumulate time for tick advancement
+    const tickDuration = 1 / this.config.serverTickRate;
+    this.tickAccumulator += deltaTime;
+    
+    // Process ticks
+    while (this.tickAccumulator >= tickDuration) {
+      this.tickAccumulator -= tickDuration;
+      this.currentTick++;
+      
+      // Update local player for this tick
+      this.simulateTick(gameState, tickDuration);
+      
+      // Record position after tick
+      this.recordPosition();
+    }
     
     // Update other players (smooth interpolation)
     this.updateOtherPlayers(deltaTime, gameState);
   },
   
-  // Update local player movement
-  updateLocalPlayer(deltaTime, gameState) {
+  // Simulate one tick of movement
+  simulateTick(gameState, dt) {
     if (!this.localPlayer || !this.localPlayer.alive) return;
     if (this.localPlayer.velocityX === 0 && this.localPlayer.velocityY === 0) return;
     
-    // Calculate new position
-    let newX = this.localPlayer.x + this.localPlayer.velocityX * deltaTime;
-    let newY = this.localPlayer.y + this.localPlayer.velocityY * deltaTime;
+    let newX = this.localPlayer.x + this.localPlayer.velocityX * dt;
+    let newY = this.localPlayer.y + this.localPlayer.velocityY * dt;
     
-    // Check collision with map only (no other players - that's server's job)
+    // Collision check
     if (this.canMoveToTile(newX, newY, gameState.map, gameState.bombs)) {
       this.localPlayer.x = newX;
       this.localPlayer.y = newY;
     } else {
-      // Try sliding along walls
+      // Wall sliding
       const canMoveX = this.canMoveToTile(newX, this.localPlayer.y, gameState.map, gameState.bombs);
       const canMoveY = this.canMoveToTile(this.localPlayer.x, newY, gameState.map, gameState.bombs);
       
@@ -99,11 +156,10 @@ const Prediction = {
     }
   },
   
-  // Collision check against tiles and bombs only (no players)
+  // Collision check against tiles and bombs
   canMoveToTile(x, y, map, bombs) {
     const radius = this.config.playerRadius;
     
-    // Check 4 corners
     const corners = [
       { x: x - radius, y: y - radius },
       { x: x + radius, y: y - radius },
@@ -115,7 +171,6 @@ const Prediction = {
       const tileX = Math.floor(corner.x);
       const tileY = Math.floor(corner.y);
       
-      // Bounds check
       if (tileX < 0 || tileX >= map.width || tileY < 0 || tileY >= map.height) {
         return false;
       }
@@ -135,7 +190,6 @@ const Prediction = {
       
       for (const bomb of bombs) {
         if (bomb.x === targetTileX && bomb.y === targetTileY) {
-          // Allow moving off a bomb we're on
           if (currentTileX === bomb.x && currentTileY === bomb.y) {
             continue;
           }
@@ -156,7 +210,6 @@ const Prediction = {
       let other = this.otherPlayers.get(serverPlayer.id);
       
       if (!other) {
-        // New player - initialize at server position
         other = {
           x: serverPlayer.x,
           y: serverPlayer.y,
@@ -166,13 +219,13 @@ const Prediction = {
         this.otherPlayers.set(serverPlayer.id, other);
       }
       
-      // Lerp toward target position
+      // Lerp toward target
       const lerpSpeed = this.config.otherPlayerLerpSpeed * deltaTime;
       other.x += (other.targetX - other.x) * Math.min(lerpSpeed, 1);
       other.y += (other.targetY - other.y) * Math.min(lerpSpeed, 1);
     }
     
-    // Clean up disconnected players
+    // Clean up disconnected
     for (const [id] of this.otherPlayers) {
       if (!gameState.players.find(p => p.id === id && p.alive)) {
         this.otherPlayers.delete(id);
@@ -180,42 +233,16 @@ const Prediction = {
     }
   },
   
-  // Reconcile with server state
+  // Reconcile with server - compare against PAST position
   reconcile(serverPlayer, gameState) {
-    const now = performance.now();
-    
-    // Track tick timing for latency estimation
-    if (gameState.tick && gameState.serverTime) {
-      const tickDiff = gameState.tick - this.lastServerTick;
-      
-      if (this.lastServerTick > 0 && tickDiff > 0) {
-        // Calculate latency based on time between ticks
-        const expectedInterval = (1000 / this.config.serverTickRate) * tickDiff;
-        const actualInterval = now - this.lastReceiveTime;
-        const latencySample = actualInterval - expectedInterval;
-        
-        // Add to jitter buffer
-        this.jitterBuffer.push(latencySample);
-        if (this.jitterBuffer.length > this.maxJitterSamples) {
-          this.jitterBuffer.shift();
-        }
-        
-        // Calculate average jitter
-        const avgJitter = this.jitterBuffer.reduce((a, b) => a + Math.abs(b), 0) / this.jitterBuffer.length;
-        this.estimatedLatency = avgJitter;
-      }
-      
-      this.lastServerTick = gameState.tick;
-      this.lastServerTime = gameState.serverTime;
-      this.lastReceiveTime = now;
-    }
+    const serverTick = gameState.tick || 0;
     
     if (!this.localPlayer) {
-      this.init(serverPlayer.id, serverPlayer);
+      this.init(serverPlayer.id, serverPlayer, serverTick);
       return;
     }
     
-    // Update stats from server
+    // Update stats
     this.localPlayer.speed = serverPlayer.speed || this.config.defaultSpeed;
     this.localPlayer.alive = serverPlayer.alive;
     
@@ -225,44 +252,66 @@ const Prediction = {
       return;
     }
     
-    // Calculate position difference
-    const dx = serverPlayer.x - this.localPlayer.x;
-    const dy = serverPlayer.y - this.localPlayer.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
+    // Find our position at the server's tick
+    const historicalPos = this.positionHistory.find(p => p.tick === serverTick);
     
-    if (distance > this.config.snapThreshold) {
-      // Teleport/respawn - snap immediately
-      console.log('[Prediction] Snap to server (distance:', distance.toFixed(2), ')');
-      this.localPlayer.x = serverPlayer.x;
-      this.localPlayer.y = serverPlayer.y;
-    } else if (distance > this.config.correctionThreshold) {
-      // Gentle correction - lerp toward server
-      // Adjust correction speed based on jitter (more jitter = slower correction)
-      const jitterFactor = Math.max(0.5, 1 - (this.estimatedLatency / 100));
-      const correction = this.config.correctionLerpSpeed * 0.016 * jitterFactor;
-      this.localPlayer.x += dx * Math.min(correction, 0.5);
-      this.localPlayer.y += dy * Math.min(correction, 0.5);
+    if (historicalPos) {
+      // Compare server position to where WE thought we were at that tick
+      const dx = serverPlayer.x - historicalPos.x;
+      const dy = serverPlayer.y - historicalPos.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      if (distance > this.config.snapThreshold) {
+        // Major desync - snap and clear history
+        console.log('[Prediction] Major desync at tick', serverTick, '- snapping (', distance.toFixed(2), 'tiles)');
+        this.localPlayer.x = serverPlayer.x;
+        this.localPlayer.y = serverPlayer.y;
+        this.positionHistory = [];
+        this.currentTick = serverTick;
+        this.recordPosition();
+      } else if (distance > this.config.correctionThreshold) {
+        // We were wrong at that tick - apply correction to current position
+        // The error at tick N propagates to now, so apply the same delta
+        console.log('[Prediction] Correction needed at tick', serverTick, ':', distance.toFixed(3), 'tiles');
+        this.localPlayer.x += dx;
+        this.localPlayer.y += dy;
+        
+        // Update all future history entries with this correction
+        for (const pos of this.positionHistory) {
+          if (pos.tick > serverTick) {
+            pos.x += dx;
+            pos.y += dy;
+          }
+        }
+      }
+      // If within threshold at that tick, we were correct - do nothing!
+    } else {
+      // No history for that tick (too old or first update)
+      // Just sync our tick counter
+      if (serverTick > this.currentTick) {
+        this.currentTick = serverTick;
+      }
     }
-    // If within threshold, trust local position completely
     
-    // Update other players' target positions
+    // Prune history - server has confirmed up to serverTick, we only need ticks AFTER
+    this.positionHistory = this.positionHistory.filter(p => p.tick > serverTick);
+    this.inputHistory = this.inputHistory.filter(i => i.tick > serverTick);
+    
+    this.lastServerTick = serverTick;
+    this.lastReceiveTime = performance.now();
+    
+    // Update other players' targets
     for (const player of gameState.players) {
       if (this.localPlayer && player.id === this.localPlayer.id) continue;
       
-      let other = this.otherPlayers.get(player.id);
+      const other = this.otherPlayers.get(player.id);
       if (other) {
-        // Store previous target for velocity estimation
-        other.lastX = other.targetX;
-        other.lastY = other.targetY;
-        
-        // Check if it's a big jump (teleport/respawn)
         const otherDist = Math.sqrt(
           Math.pow(player.x - other.targetX, 2) + 
           Math.pow(player.y - other.targetY, 2)
         );
         
         if (otherDist > this.config.snapThreshold) {
-          // Snap other player too
           other.x = player.x;
           other.y = player.y;
         }
@@ -275,54 +324,40 @@ const Prediction = {
   
   // Get position for rendering
   getPlayerPosition(player, localPlayerId) {
-    // Local player - use predicted position
     if (this.localPlayer && player.id === localPlayerId) {
-      return {
-        x: this.localPlayer.x,
-        y: this.localPlayer.y
-      };
+      return { x: this.localPlayer.x, y: this.localPlayer.y };
     }
     
-    // Other players - use interpolated position
     const other = this.otherPlayers.get(player.id);
     if (other) {
-      return {
-        x: other.x,
-        y: other.y
-      };
+      return { x: other.x, y: other.y };
     }
     
-    // Fallback to server position
-    return {
-      x: player.x,
-      y: player.y
-    };
+    return { x: player.x, y: player.y };
   },
   
   // Reset state
   reset() {
     this.localPlayer = null;
+    this.positionHistory = [];
+    this.inputHistory = [];
     this.otherPlayers.clear();
     this.lastUpdateTime = 0;
+    this.currentTick = 0;
     this.lastServerTick = 0;
-    this.lastServerTime = 0;
     this.lastReceiveTime = 0;
-    this.estimatedLatency = 0;
-    this.jitterBuffer = [];
+    this.tickAccumulator = 0;
   },
   
-  // Get sync stats for debugging
+  // Debug stats
   getSyncStats() {
     return {
-      lastTick: this.lastServerTick,
-      estimatedLatency: this.estimatedLatency.toFixed(1) + 'ms',
-      jitter: this.jitterBuffer.length > 0 
-        ? (Math.max(...this.jitterBuffer) - Math.min(...this.jitterBuffer)).toFixed(1) + 'ms'
-        : '0ms',
-      localPlayer: this.localPlayer ? {
-        x: this.localPlayer.x.toFixed(2),
-        y: this.localPlayer.y.toFixed(2)
-      } : null
+      currentTick: this.currentTick,
+      lastServerTick: this.lastServerTick,
+      ticksBehind: this.currentTick - this.lastServerTick,
+      historyLength: this.positionHistory.length,
+      localPos: this.localPlayer ? 
+        `(${this.localPlayer.x.toFixed(2)}, ${this.localPlayer.y.toFixed(2)})` : 'none'
     };
   }
 };
