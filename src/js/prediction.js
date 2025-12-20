@@ -34,9 +34,13 @@ const Prediction = {
   lastReceiveTime: 0,
   tickAccumulator: 0,      // For sub-tick timing
   
-  // Track last sent position to detect server rejection
-  lastSentPosition: null,
-  lastServerPosition: null,
+  // Track drift to detect sustained desync
+  driftStartTime: 0,      // When drift started
+  isDrifting: false,      // Currently drifting?
+  
+  // Timing config
+  maxDriftTime: 500,      // How long drift is allowed before correction (ms)
+  driftThreshold: 0.4,    // Distance to consider "drifting"
   
   // Initialize for local player
   init(playerId, serverPlayer, serverTick) {
@@ -56,8 +60,8 @@ const Prediction = {
     this.positionHistory = new Map();
     this.inputHistory = [];
     this.otherPlayers.clear();
-    this.lastSentPosition = null;
-    this.lastServerPosition = { x: serverPlayer.x, y: serverPlayer.y };
+    this.isDrifting = false;
+    this.driftStartTime = 0;
     
     // Record initial position
     this.recordPosition();
@@ -92,7 +96,7 @@ const Prediction = {
     });
     
     // Trim old inputs
-    while (this.inputHistory.length > this.maxHistoryLength) {
+    while (this.inputHistory.length > this.maxHistoryTicks) {
       this.inputHistory.shift();
     }
   },
@@ -265,60 +269,52 @@ const Prediction = {
     
     const serverPos = { x: serverPlayer.x, y: serverPlayer.y };
     
-    // REJECTION DETECTION:
-    // If server position hasn't moved from last time BUT we sent a new position,
-    // that means server rejected our move (collision with player, etc.)
+    // DRIFT-BASED RECONCILIATION:
+    // Only correct if we've been drifting from server for too long
+    // This handles latency gracefully - temporary drift is OK
     
-    let needsCorrection = false;
-    let correctionReason = '';
-    
-    if (this.lastServerPosition && this.lastSentPosition) {
-      const serverMoved = Math.abs(serverPos.x - this.lastServerPosition.x) > 0.01 ||
-                          Math.abs(serverPos.y - this.lastServerPosition.y) > 0.01;
-      
-      // Check if server position is roughly where we sent it
-      const sentDist = Math.sqrt(
-        Math.pow(serverPos.x - this.lastSentPosition.x, 2) +
-        Math.pow(serverPos.y - this.lastSentPosition.y, 2)
-      );
-      
-      // If server didn't accept our position (it's far from what we sent)
-      // AND server didn't move (stayed at old position) -> rejection
-      if (!serverMoved && sentDist > this.config.correctionThreshold) {
-        needsCorrection = true;
-        correctionReason = 'server rejected move';
-      }
-    }
-    
-    // Also check for major desync (teleport, respawn, etc.)
     const currentDist = Math.sqrt(
       Math.pow(serverPos.x - this.localPlayer.x, 2) +
       Math.pow(serverPos.y - this.localPlayer.y, 2)
     );
     
+    const now = performance.now();
+    
     if (currentDist > this.config.snapThreshold) {
-      // Major desync - snap immediately
+      // Major desync - snap immediately (teleport, death, etc.)
       console.log('[Prediction] Major desync - snapping:', currentDist.toFixed(2), 'tiles');
       this.localPlayer.x = serverPos.x;
       this.localPlayer.y = serverPos.y;
       this.positionHistory = new Map();
       this.currentTick = serverTick;
       this.recordPosition();
-    } else if (needsCorrection) {
-      // Server rejected our move - blend toward server position
-      console.log('[Prediction] Correction needed:', correctionReason);
-      const dx = serverPos.x - this.localPlayer.x;
-      const dy = serverPos.y - this.localPlayer.y;
-      
-      // Smooth blend - don't snap harshly
-      const blendFactor = 0.5;
-      this.localPlayer.x += dx * blendFactor;
-      this.localPlayer.y += dy * blendFactor;
+      this.isDrifting = false;
+    } else if (currentDist > this.driftThreshold) {
+      // We're drifting from server
+      if (!this.isDrifting) {
+        // Just started drifting - start timer
+        this.isDrifting = true;
+        this.driftStartTime = now;
+      } else if (now - this.driftStartTime > this.maxDriftTime) {
+        // Been drifting too long - server probably rejected our move
+        console.log('[Prediction] Sustained drift detected - correcting:', currentDist.toFixed(2), 'tiles');
+        
+        // Smooth blend toward server
+        const dx = serverPos.x - this.localPlayer.x;
+        const dy = serverPos.y - this.localPlayer.y;
+        const blendFactor = 0.3;
+        this.localPlayer.x += dx * blendFactor;
+        this.localPlayer.y += dy * blendFactor;
+        
+        // Reset drift timer to avoid rapid corrections
+        this.driftStartTime = now;
+      }
+      // Else: still within allowed drift time, trust local
+    } else {
+      // We're in sync (or close enough) - reset drift tracking
+      this.isDrifting = false;
     }
-    // If no correction needed: trust local position completely!
-    
-    // Store server position for next comparison
-    this.lastServerPosition = { x: serverPos.x, y: serverPos.y };
+    // Trust local position for normal movement!
     
     // Prune old history
     for (const tick of this.positionHistory.keys()) {
@@ -356,17 +352,11 @@ const Prediction = {
   // Get local player position with tick (for sending to server)
   getLocalPosition() {
     if (!this.localPlayer) return null;
-    
-    const pos = {
+    return {
       x: this.localPlayer.x,
       y: this.localPlayer.y,
       tick: this.currentTick
     };
-    
-    // Track what we're sending so we can detect rejection
-    this.lastSentPosition = { x: pos.x, y: pos.y, tick: pos.tick };
-    
-    return pos;
   },
   
   // Get position for rendering
@@ -394,8 +384,8 @@ const Prediction = {
     this.lastServerTick = 0;
     this.lastReceiveTime = 0;
     this.tickAccumulator = 0;
-    this.lastSentPosition = null;
-    this.lastServerPosition = null;
+    this.isDrifting = false;
+    this.driftStartTime = 0;
   },
   
   // Debug stats
@@ -405,6 +395,7 @@ const Prediction = {
       lastServerTick: this.lastServerTick,
       ticksAhead: this.currentTick - this.lastServerTick,
       historySize: this.positionHistory.size,
+      isDrifting: this.isDrifting,
       localPos: this.localPlayer ? 
         `(${this.localPlayer.x.toFixed(2)}, ${this.localPlayer.y.toFixed(2)})` : 'none'
     };
