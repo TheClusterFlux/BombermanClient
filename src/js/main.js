@@ -196,6 +196,35 @@ class BombermanClient {
       case 'GAME_STATE':
         this.gameState = message.state;
         
+        // Fix explosion timestamps for clock synchronization
+        // Replace server timestamp with client timestamp when we first see an explosion
+        const now = Date.now();
+        if (this.gameState.explosions) {
+          for (const explosion of this.gameState.explosions) {
+            // Generate a unique ID for tracking
+            const expId = `${explosion.originX}_${explosion.originY}_${explosion.timestamp}`;
+            if (!this.knownExplosions) this.knownExplosions = new Map();
+            
+            if (!this.knownExplosions.has(expId)) {
+              // First time seeing this explosion - use current client time
+              explosion.clientTimestamp = now;
+              this.knownExplosions.set(expId, now);
+            } else {
+              // Already seen - use the stored client timestamp
+              explosion.clientTimestamp = this.knownExplosions.get(expId);
+            }
+          }
+          
+          // Clean up old explosion tracking (keep last 20)
+          if (this.knownExplosions.size > 20) {
+            const entries = Array.from(this.knownExplosions.entries());
+            entries.sort((a, b) => a[1] - b[1]);
+            for (let i = 0; i < entries.length - 20; i++) {
+              this.knownExplosions.delete(entries[i][0]);
+            }
+          }
+        }
+        
         // Initialize or reinitialize renderer if needed
         const needsInit = !Renderer.initialized || 
                           Renderer.canvas.width !== this.gameState.map.width * Renderer.tileSize ||

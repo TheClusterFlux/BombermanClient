@@ -162,46 +162,55 @@ const Renderer = {
   
   drawExplosions(explosions) {
     const now = Date.now();
-    const defaultPropDelay = 20; // Fallback if not provided
+    const defaultPropDelay = 20; // ms per tile
+    const defaultDuration = 500; // ms total
     
     for (const explosion of explosions) {
-      const age = now - explosion.timestamp;
+      // Use client timestamp (set in main.js) for accurate timing
+      const timestamp = explosion.clientTimestamp || explosion.timestamp || now;
+      const age = now - timestamp;
+      
+      // Skip if somehow negative
+      if (age < 0) continue;
+      
       const propDelay = explosion.propagationDelay || defaultPropDelay;
+      const duration = explosion.duration || defaultDuration;
+      
+      // Overall explosion fade (last 200ms)
+      const overallAlpha = age < duration - 200 ? 1 : Math.max(0, (duration - age) / 200);
+      if (overallAlpha <= 0) continue;
       
       for (const tile of explosion.tiles) {
-        const distance = tile.distance || 0;
+        const distance = tile.distance !== undefined ? tile.distance : 0;
         const tileActivationTime = distance * propDelay;
         
         // Skip tiles that haven't been reached yet
         if (age < tileActivationTime) continue;
         
-        // Calculate tile-specific age (time since THIS tile was reached)
+        // Time since this tile activated
         const tileAge = age - tileActivationTime;
-        const tileDuration = explosion.duration - tileActivationTime;
         
-        // Alpha based on how long this tile has been active
-        const alpha = Math.max(0, 1 - (tileAge / tileDuration));
-        if (alpha <= 0) continue;
-        
-        // Expansion animation for newly activated tiles
-        const expansionDuration = 50; // ms for tile to fully expand
+        // Expansion animation (first 50ms)
+        const expansionDuration = 50;
         const expansion = Math.min(1, tileAge / expansionDuration);
         const size = this.tileSize * expansion;
         const offset = (this.tileSize - size) / 2;
         
-        // Draw explosion tile with gradient
+        // Skip if too small
+        if (size < 2) continue;
+        
         const centerX = tile.x * this.tileSize + this.tileSize / 2;
         const centerY = tile.y * this.tileSize + this.tileSize / 2;
         
-        // Outer glow
+        // Draw explosion with gradient
         const gradient = this.ctx.createRadialGradient(
           centerX, centerY, 0,
           centerX, centerY, size / 2
         );
-        gradient.addColorStop(0, `rgba(255, 255, 200, ${alpha})`);
-        gradient.addColorStop(0.3, `rgba(255, 200, 50, ${alpha})`);
-        gradient.addColorStop(0.7, `rgba(255, 100, 0, ${alpha * 0.8})`);
-        gradient.addColorStop(1, `rgba(200, 50, 0, ${alpha * 0.4})`);
+        gradient.addColorStop(0, `rgba(255, 255, 200, ${overallAlpha})`);
+        gradient.addColorStop(0.3, `rgba(255, 200, 50, ${overallAlpha})`);
+        gradient.addColorStop(0.7, `rgba(255, 100, 0, ${overallAlpha * 0.8})`);
+        gradient.addColorStop(1, `rgba(200, 50, 0, ${overallAlpha * 0.4})`);
         
         this.ctx.fillStyle = gradient;
         this.ctx.fillRect(
@@ -211,9 +220,9 @@ const Renderer = {
           size
         );
         
-        // Center flash for recently activated tiles
-        if (tileAge < 100) {
-          const flashAlpha = (1 - tileAge / 100) * alpha;
+        // Center flash for newly activated tiles (first 80ms)
+        if (tileAge < 80) {
+          const flashAlpha = (1 - tileAge / 80) * overallAlpha;
           this.ctx.fillStyle = `rgba(255, 255, 255, ${flashAlpha})`;
           this.ctx.beginPath();
           this.ctx.arc(centerX, centerY, size / 4, 0, Math.PI * 2);
